@@ -1,0 +1,15 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+#tesserocr = {path = "./tesserocr"}
+pillow = "*"
+tesserocr = {path = "./tesserocr"}
+
+[dev-packages]
+docutils = "*"
+
+[requires]
+python_version = "3.6"
