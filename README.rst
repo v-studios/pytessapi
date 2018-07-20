@@ -4,6 +4,7 @@
 
 https://github.com/tesseract-ocr/tesseract/wiki/AddOns#tesseract-wrappers
 lists API wrappers including:
+
 * tesserocr
 * tesserwrap
 * python-tesseract-sip
