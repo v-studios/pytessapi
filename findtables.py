@@ -38,7 +38,17 @@ def main(args):
     with PyTessBaseAPI(psm=args.psm) as api:
         api.SetImageFile(args.filepath)
 
-        api.SetVariable("textord_tablefind_recognize_tables", "true")
+        # ret = api.SetVariable('textord_dump_table_images', 'true')  # 302: 0, not in 400
+        # print('textord_dump_table_images={}'.format(ret))
+        ret = api.SetVariable('textord_tabfind_find_tables', 'true')  # 400: 1
+        print('textord_tabfind_find_tables={}'.format(ret))
+        ret = api.SetVariable('textord_tablefind_recognize_tables', 'true') # 400: 0
+        print('textord_tablefind_recognize_tables={}'.format(ret))
+        ret = api.SetVariable('textord_tablefind_show_mark', 'true')  # 400: 0
+        print('textord_tablefind_show_mark={}'.format(ret))
+        ret = api.SetVariable('textord_tablefind_show_stats', 'true')   # 400: 0
+        print('textord_tablefind_show_stats={}'.format(ret))
+
         if args.scrollview:
             # This launches ScrollView so ensure SCROLLVIEW_PATH points to our
             # ./scrollview/ dir with ScrollView.jar and piccolo2d-*-3.0.jar files
@@ -50,9 +60,12 @@ def main(args):
         level = RIL.BLOCK           # BLOCK, PARA, SYMBOL, TEXTLINE, WORD
         riter = api.GetIterator()
         for r in iterate_level(riter, level):
-            print('### blocktype={}={} confidence={} txt:\n{}'.format(
-                r.BlockType(), PT_NAME[r.BlockType()],
-                int(r.Confidence(level)), r.GetUTF8Text(level)))
+            if args.tablesonly is False or PT_NAME[r.BlockType()] == 'TABLE':
+                print('### blocktype={}={} confidence={} txt:\n{}'.format(
+                    r.BlockType(), PT_NAME[r.BlockType()],
+                    int(r.Confidence(level)), r.GetUTF8Text(level)))
+        if args.scrollview:
+            input('Type something to exit scrollview:')
 
 
 if __name__ == '__main__':
@@ -63,7 +76,9 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--psm', dest='psm',
                         default=12, type=int,
                         help='Page Segmentation Mode (default 12)')
-
+    parser.add_argument('-t', '--tables-only', dest='tablesonly',
+                        default=False, action='store_true',
+                        help='Display only table info, not non-TABLE blocks')
     parser.add_argument('-s', '--scrollview', dest='scrollview',
                         default=False, action='store_true',
                         help='Enable ScrollView display (set SCROLLVIEW_PATH=scrollview)')
