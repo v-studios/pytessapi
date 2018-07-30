@@ -32,27 +32,27 @@ PT_NAME = {
 }
 
 
-
 def main(args):
-    """Show the blocks."""
-    api = PyTessBaseAPI()
-    api.SetVariable("textord_tablefind_recognize_tables", "true")
-    # This launches ScrollView so ensure SCROLLVIEW_PATH points to our
-    # ./scrollview/ dir with ScrollView.jar and piccolo2d-*-3.0.jar files
-    if args.scrollview:
-        api.SetVariable("textord_show_tables", "true")  # launches ScrollView
+    """Show the blocks and extracted text."""
 
-    # Must set image after variables to get ScrollView to work
-    image = Image.open(args.filepath)
-    api.SetImage(image)
-    api.Recognize()             # what's this do?
-    # api.AnalyseLayout()         # causes nullptr in iterator
+    with PyTessBaseAPI(psm=args.psm) as api:
+        api.SetImageFile(args.filepath)
 
-    level = RIL.BLOCK           # BLOCK PARA SYMBOL TEXTLINE WORD
-    riter = api.GetIterator()
-    for r in iterate_level(riter, level):
-        print('### blocktype={}={} confidence={} txt:\n{}'.format(
-            r.BlockType(), PT_NAME[r.BlockType()], int(r.Confidence(level)), r.GetUTF8Text(level)))
+        api.SetVariable("textord_tablefind_recognize_tables", "true")
+        if args.scrollview:
+            # This launches ScrollView so ensure SCROLLVIEW_PATH points to our
+            # ./scrollview/ dir with ScrollView.jar and piccolo2d-*-3.0.jar files
+            api.SetVariable("textord_show_tables", "true")  # launches ScrollView
+
+        api.Recognize()             # what's this do?
+        # api.AnalyseLayout()         # causes nullptr in iterator
+
+        level = RIL.BLOCK           # BLOCK, PARA, SYMBOL, TEXTLINE, WORD
+        riter = api.GetIterator()
+        for r in iterate_level(riter, level):
+            print('### blocktype={}={} confidence={} txt:\n{}'.format(
+                r.BlockType(), PT_NAME[r.BlockType()],
+                int(r.Confidence(level)), r.GetUTF8Text(level)))
 
 
 if __name__ == '__main__':
@@ -60,6 +60,10 @@ if __name__ == '__main__':
     parser.add_argument('-f', '--filepath', dest='filepath',
                         default='sample-doc-with-table-300ppi.png',
                         help='path to the PNG, TIF or PDF scanned page')
+    parser.add_argument('-p', '--psm', dest='psm',
+                        default=12, type=int,
+                        help='Page Segmentation Mode (default 12)')
+
     parser.add_argument('-s', '--scrollview', dest='scrollview',
                         default=False, action='store_true',
                         help='Enable ScrollView display (set SCROLLVIEW_PATH=scrollview)')

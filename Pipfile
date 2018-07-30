@@ -5,8 +5,7 @@ name = "pypi"
 
 [packages]
 #tesserocr = {path = "./tesserocr"}
-pillow = "*"
-tesserocr = {path = "./tesserocr"}
+tesserocr = "*"
 
 [dev-packages]
 docutils = "*"
