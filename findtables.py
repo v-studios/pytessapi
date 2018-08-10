@@ -2,9 +2,10 @@
 """For a given image, iterate over the blocks and find ones that are tables."""
 
 import argparse
+from collections import namedtuple
 import locale
 
-from PIL import Image
+# from PIL import Image
 
 locale.setlocale(locale.LC_ALL, "C")  # MUST come before import of tesserocr
 
@@ -32,11 +33,28 @@ PT_NAME = {
 }
 
 
+
+# In my default test image, the large table BoundingBox(level) returns:
+TABLE_BBOX=(325, 1323, 2128, 1875)
+# This appears to be (Xtop, Ytop, Xbot, Ybot)
+# and NOT (Xtop, Ytop, width, height) as used elsewhere
+
+
 def main(args):
     """Show the blocks and extracted text."""
 
+    BoxXYXY = namedtuple('BoxXYXY', ['xtop', 'ytop', 'xbot', 'ybot'])
+    BoxXYWH = namedtuple('BoxXYWH', ['x', 'y', 'w', 'h'])
+
+    table_xyxy = BoxXYXY(*TABLE_BBOX)
+
     with PyTessBaseAPI(psm=args.psm) as api:
         api.SetImageFile(args.filepath)
+
+        # SetRectangle wants (Xtop, Ytop, Width, Height)
+        api.SetRectangle(table_xyxy.xtop, table_xyxy.ytop,
+                         table_xyxy.xbot - table_xyxy.xtop, table_xyxy.ybot - table_xyxy.ytop)
+
 
         # Set variables to find blocks, show info -- version and default in comments
         # api.SetVariable('textord_dump_table_images', 'true')         # 302: 0, not in 400
@@ -53,14 +71,25 @@ def main(args):
         api.Recognize()             # what's this do?
         # api.AnalyseLayout()         # causes nullptr in iterator
 
+        horz_lines = []
+        vert_lines = []
         level = RIL.BLOCK           # BLOCK, PARA, SYMBOL, TEXTLINE, WORD
         riter = api.GetIterator()
         for r in iterate_level(riter, level):
-            if args.tablesonly is False or PT_NAME[r.BlockType()] == 'TABLE':
-                print('### blocktype={}={} confidence={} txt:\n{}'.format(
+            import pdb; pdb.set_trace()
+
+            if r.BlockType() == PT.HORZ_LINE:
+                horz_lines.append(BoxXYXY(*r.BoundingBox(level)))
+            if r.BlockType() == PT.VERT_LINE:
+                vert_lines.append(BoxXYXY(*r.BoundingBox(level)))
+            if args.tablesonly is False or r.BlockType() == PT.TABLE:
+                print('### blocktype={}={} confidence={} bbox={} txt:\n{}'.format(
                     r.BlockType(), PT_NAME[r.BlockType()],
-                    int(r.Confidence(level)), r.GetUTF8Text(level)))
-                import pdb; pdb.set_trace()
+                    int(r.Confidence(level)), r.BoundingBox(level), r.GetUTF8Text(level)))
+            # import pdb; pdb.set_trace()
+
+        print('horz_lines={}'.format(horz_lines))
+        print('vert_lines={}'.format(vert_lines))
 
         if args.scrollview:
             input('Type something to exit scrollview:')
