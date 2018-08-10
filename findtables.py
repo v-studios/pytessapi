@@ -38,16 +38,12 @@ def main(args):
     with PyTessBaseAPI(psm=args.psm) as api:
         api.SetImageFile(args.filepath)
 
-        # ret = api.SetVariable('textord_dump_table_images', 'true')  # 302: 0, not in 400
-        # print('textord_dump_table_images={}'.format(ret))
-        ret = api.SetVariable('textord_tabfind_find_tables', 'true')  # 400: 1
-        print('textord_tabfind_find_tables={}'.format(ret))
-        ret = api.SetVariable('textord_tablefind_recognize_tables', 'true') # 400: 0
-        print('textord_tablefind_recognize_tables={}'.format(ret))
-        ret = api.SetVariable('textord_tablefind_show_mark', 'true')  # 400: 0
-        print('textord_tablefind_show_mark={}'.format(ret))
-        ret = api.SetVariable('textord_tablefind_show_stats', 'true')   # 400: 0
-        print('textord_tablefind_show_stats={}'.format(ret))
+        # Set variables to find blocks, show info -- version and default in comments
+        # api.SetVariable('textord_dump_table_images', 'true')         # 302: 0, not in 400
+        api.SetVariable('textord_tabfind_find_tables', 'true')         # 400: 1
+        api.SetVariable('textord_tablefind_recognize_tables', 'true')  # 400: 0
+        api.SetVariable('textord_tablefind_show_mark', 'true')         # 400: 0
+        api.SetVariable('textord_tablefind_show_stats', 'true')        # 400: 0
 
         if args.scrollview:
             # This launches ScrollView so ensure SCROLLVIEW_PATH points to our
@@ -64,18 +60,21 @@ def main(args):
                 print('### blocktype={}={} confidence={} txt:\n{}'.format(
                     r.BlockType(), PT_NAME[r.BlockType()],
                     int(r.Confidence(level)), r.GetUTF8Text(level)))
+                import pdb; pdb.set_trace()
+
         if args.scrollview:
             input('Type something to exit scrollview:')
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser('Try to find tables in a scan')
+    parser = argparse.ArgumentParser(description='Try to find tables in a scan; '
+                                     'only seems to work with PSM 0-3')
     parser.add_argument('-f', '--filepath', dest='filepath',
                         default='sample-doc-with-table-300ppi.png',
                         help='path to the PNG, TIF or PDF scanned page')
     parser.add_argument('-p', '--psm', dest='psm',
-                        default=12, type=int,
-                        help='Page Segmentation Mode (default 12)')
+                        default=3, type=int,
+                        help='Page Segmentation Mode (default 3)')
     parser.add_argument('-t', '--tables-only', dest='tablesonly',
                         default=False, action='store_true',
                         help='Display only table info, not non-TABLE blocks')
