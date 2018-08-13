@@ -55,13 +55,12 @@ def main(args):
         api.SetRectangle(table_xyxy.xtop, table_xyxy.ytop,
                          table_xyxy.xbot - table_xyxy.xtop, table_xyxy.ybot - table_xyxy.ytop)
 
-
         # Set variables to find blocks, show info -- version and default in comments
         # api.SetVariable('textord_dump_table_images', 'true')         # 302: 0, not in 400
         api.SetVariable('textord_tabfind_find_tables', 'true')         # 400: 1
         api.SetVariable('textord_tablefind_recognize_tables', 'true')  # 400: 0
-        api.SetVariable('textord_tablefind_show_mark', 'true')         # 400: 0
-        api.SetVariable('textord_tablefind_show_stats', 'true')        # 400: 0
+        #api.SetVariable('textord_tablefind_show_mark', 'true')         # 400: 0
+        #api.SetVariable('textord_tablefind_show_stats', 'true')        # 400: 0
 
         if args.scrollview:
             # This launches ScrollView so ensure SCROLLVIEW_PATH points to our
@@ -76,8 +75,6 @@ def main(args):
         level = RIL.BLOCK           # BLOCK, PARA, SYMBOL, TEXTLINE, WORD
         riter = api.GetIterator()
         for r in iterate_level(riter, level):
-            import pdb; pdb.set_trace()
-
             if r.BlockType() == PT.HORZ_LINE:
                 horz_lines.append(BoxXYXY(*r.BoundingBox(level)))
             if r.BlockType() == PT.VERT_LINE:
@@ -86,10 +83,43 @@ def main(args):
                 print('### blocktype={}={} confidence={} bbox={} txt:\n{}'.format(
                     r.BlockType(), PT_NAME[r.BlockType()],
                     int(r.Confidence(level)), r.BoundingBox(level), r.GetUTF8Text(level)))
-            # import pdb; pdb.set_trace()
 
         print('horz_lines={}'.format(horz_lines))
         print('vert_lines={}'.format(vert_lines))
+
+        # Get X and Y list for TABLE and HLINE and VLINE respectively
+        ys = [table_xyxy.ytop, table_xyxy.ybot]
+        xs = [table_xyxy.xtop, table_xyxy.xbot]
+        for hline in horz_lines:
+            ys.append(round((hline.ytop + hline.ybot) / 2))
+        ys.sort()
+        for vline in vert_lines:
+            xs.append(round((vline.xtop + vline.xbot) / 2))
+        xs.sort()
+        print('ys={}'.format(ys))
+        print('xs={}'.format(xs))
+        # Iterate over pairs of lines and x-coords to get text in each cell
+        table_xmin = xs[0]
+        table_xmax = xs[-1]
+        for ymin, ymax in zip(ys[:-1], ys[1:]):
+            # Set the rectangle, then get the text inside
+            width = table_xmax - table_xmin
+            height = ymax - ymin
+            api.SetRectangle(table_xmin, ymin, width, height)
+            line = api.GetUTF8Text().strip()
+            print('\n### LINE ({}, {}, {}, {}) w={} h={}: {}'.format(
+                table_xmin, ymin, table_xmax, ymax, width, height, line))
+            # Interestingly, on non-header row, the cell text is \n-separated; can't depend on it tho
+            for xmin, xmax in zip(xs[:-1], xs[1:]):
+                width = xmax - xmin
+                height = ymax - ymin
+                api.SetRectangle(xmin - 1 , ymin, width + 2, height)
+                cell = api.GetUTF8Text().strip()
+                print('### CELL ({}, {}, {}, {}) w={} h={}: {}'.format(
+                    xmin, ymin, xmax, ymax, width, height, cell))
+
+
+
 
         if args.scrollview:
             input('Type something to exit scrollview:')
