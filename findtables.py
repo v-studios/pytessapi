@@ -5,12 +5,11 @@ import argparse
 from collections import namedtuple
 import locale
 
-# from PIL import Image
-
 locale.setlocale(locale.LC_ALL, "C")  # MUST come before import of tesserocr
 
 from tesserocr import PT, PyTessBaseAPI, RIL, iterate_level
 
+LEVEL = RIL.BLOCK           # BLOCK, PARA, SYMBOL, TEXTLINE, WORD
 # PT is a 'type' so make a textual mapping
 # Isn't there an easier, built-in way to do this??
 PT_NAME = {
@@ -33,90 +32,87 @@ PT_NAME = {
 }
 
 
-
-# In my default test image, the large table BoundingBox(level) returns:
-TABLE_BBOX=(325, 1323, 2128, 1875)
-# This appears to be (Xtop, Ytop, Xbot, Ybot)
-# and NOT (Xtop, Ytop, width, height) as used elsewhere
-
-
 def main(args):
     """Show the blocks and extracted text."""
 
     BoxXYXY = namedtuple('BoxXYXY', ['xtop', 'ytop', 'xbot', 'ybot'])
-    BoxXYWH = namedtuple('BoxXYWH', ['x', 'y', 'w', 'h'])
+    # BoxXYWH = namedtuple('BoxXYWH', ['x', 'y', 'w', 'h'])
 
-    table_xyxy = BoxXYXY(*TABLE_BBOX)
-
+    # First pass through API: find TABLEs
+    print('# Finding tables...')
+    tables = []
     with PyTessBaseAPI(psm=args.psm) as api:
         api.SetImageFile(args.filepath)
 
-        # SetRectangle wants (Xtop, Ytop, Width, Height)
-        api.SetRectangle(table_xyxy.xtop, table_xyxy.ytop,
-                         table_xyxy.xbot - table_xyxy.xtop, table_xyxy.ybot - table_xyxy.ytop)
-
         # Set variables to find blocks, show info -- version and default in comments
-        # api.SetVariable('textord_dump_table_images', 'true')         # 302: 0, not in 400
+        # Ensure SCROLLVIEW_PATH points to our ./scrollview/ dir with jars
         api.SetVariable('textord_tabfind_find_tables', 'true')         # 400: 1
         api.SetVariable('textord_tablefind_recognize_tables', 'true')  # 400: 0
-        #api.SetVariable('textord_tablefind_show_mark', 'true')         # 400: 0
-        #api.SetVariable('textord_tablefind_show_stats', 'true')        # 400: 0
-
+        # api.SetVariable('textord_tablefind_show_mark', 'true')         # 400: 0
+        # api.SetVariable('textord_tablefind_show_stats', 'true')        # 400: 0
         if args.scrollview:
-            # This launches ScrollView so ensure SCROLLVIEW_PATH points to our
-            # ./scrollview/ dir with ScrollView.jar and piccolo2d-*-3.0.jar files
             api.SetVariable("textord_show_tables", "true")  # launches ScrollView
 
-        api.Recognize()             # what's this do?
-        # api.AnalyseLayout()         # causes nullptr in iterator
-
-        horz_lines = []
-        vert_lines = []
-        level = RIL.BLOCK           # BLOCK, PARA, SYMBOL, TEXTLINE, WORD
+        api.Recognize()
         riter = api.GetIterator()
-        for r in iterate_level(riter, level):
-            if r.BlockType() == PT.HORZ_LINE:
-                horz_lines.append(BoxXYXY(*r.BoundingBox(level)))
-            if r.BlockType() == PT.VERT_LINE:
-                vert_lines.append(BoxXYXY(*r.BoundingBox(level)))
+        for r in iterate_level(riter, LEVEL):
+            if r.BlockType() == PT.TABLE:
+                tables.append(BoxXYXY(*r.BoundingBox(LEVEL)))
             if args.tablesonly is False or r.BlockType() == PT.TABLE:
                 print('### blocktype={}={} confidence={} bbox={} txt:\n{}'.format(
                     r.BlockType(), PT_NAME[r.BlockType()],
-                    int(r.Confidence(level)), r.BoundingBox(level), r.GetUTF8Text(level)))
+                    int(r.Confidence(LEVEL)), r.BoundingBox(LEVEL), r.GetUTF8Text(LEVEL)))
 
-        print('horz_lines={}'.format(horz_lines))
-        print('vert_lines={}'.format(vert_lines))
-
-        # Get X and Y list for TABLE and HLINE and VLINE respectively
-        ys = [table_xyxy.ytop, table_xyxy.ybot]
-        xs = [table_xyxy.xtop, table_xyxy.xbot]
-        for hline in horz_lines:
-            ys.append(round((hline.ytop + hline.ybot) / 2))
-        ys.sort()
-        for vline in vert_lines:
-            xs.append(round((vline.xtop + vline.xbot) / 2))
-        xs.sort()
-        print('ys={}'.format(ys))
-        print('xs={}'.format(xs))
-        # Iterate over pairs of lines and x-coords to get text in each cell
-        table_xmin = xs[0]
-        table_xmax = xs[-1]
-        for ymin, ymax in zip(ys[:-1], ys[1:]):
-            # Set the rectangle, then get the text inside
-            width = table_xmax - table_xmin
-            height = ymax - ymin
-            api.SetRectangle(table_xmin, ymin, width, height)
-            line = api.GetUTF8Text().strip()
-            print('\n### LINE ({}, {}, {}, {}) w={} h={}: {}'.format(
-                table_xmin, ymin, table_xmax, ymax, width, height, line))
-            # Interestingly, on non-header row, the cell text is \n-separated; can't depend on it tho
-            for xmin, xmax in zip(xs[:-1], xs[1:]):
-                width = xmax - xmin
+    # Second pass through API: get LINEs in the TABLEs, read cells
+    print('# Finding cells in each table...')
+    for table in tables:
+        print('# table={}'.format(table))
+        with PyTessBaseAPI(psm=args.psm) as api:
+            horz_lines = []
+            vert_lines = []
+            width = table.xbot - table.xtop
+            height = table.ybot - table.ytop
+            api.SetImageFile(args.filepath)
+            api.SetRectangle(table.xtop, table.ytop, width, height)
+            api.Recognize()
+            riter = api.GetIterator()
+            for r in iterate_level(riter, LEVEL):
+                if r.BlockType() == PT.HORZ_LINE:
+                    horz_lines.append(BoxXYXY(*r.BoundingBox(LEVEL)))
+                if r.BlockType() == PT.VERT_LINE:
+                    vert_lines.append(BoxXYXY(*r.BoundingBox(LEVEL)))
+            print('horz_lines={}'.format(horz_lines))
+            print('vert_lines={}'.format(vert_lines))
+            # Get X and Y list for TABLE and HLINE and VLINE respectively, sort each
+            ys = [table.ytop, table.ybot]
+            xs = [table.xtop, table.xbot]
+            for hline in horz_lines:
+                ys.append(round((hline.ytop + hline.ybot) / 2))
+            ys.sort()
+            for vline in vert_lines:
+                xs.append(round((vline.xtop + vline.xbot) / 2))
+            xs.sort()
+            print('ys={}'.format(ys))
+            print('xs={}'.format(xs))
+            # Iterate over pairs of lines and x-coords to get text in each cell
+            table_xmin = xs[0]
+            table_xmax = xs[-1]
+            for ymin, ymax in zip(ys[:-1], ys[1:]):
+                # Set the rectangle, then get the text inside
+                width = table_xmax - table_xmin
                 height = ymax - ymin
-                api.SetRectangle(xmin - 1 , ymin, width + 2, height)
-                cell = api.GetUTF8Text().strip()
-                print('### CELL ({}, {}, {}, {}) w={} h={}: {}'.format(
-                    xmin, ymin, xmax, ymax, width, height, cell))
+                api.SetRectangle(table_xmin, ymin, width, height)
+                line = api.GetUTF8Text().strip().replace('\n\n', '\n')
+                print('\n### LINE ({:>4}, {:>4}, {:>4}, {:>4}) w={:>4} h={:>4}:\n{}'.format(
+                    table_xmin, ymin, table_xmax, ymax, width, height, line))
+                # Interestingly, on non-header row, the cell text is \n-separated; can't depend on it tho
+                for xmin, xmax in zip(xs[:-1], xs[1:]):
+                    width = xmax - xmin
+                    height = ymax - ymin
+                    api.SetRectangle(xmin, ymin, width, height)
+                    cell = api.GetUTF8Text().strip()
+                    print('### CELL ({:>4}, {:>4}, {:>4}, {:>4}) w={:>4} h={:>4}: {}'.format(
+                        xmin, ymin, xmax, ymax, width, height, cell))
 
 
 
